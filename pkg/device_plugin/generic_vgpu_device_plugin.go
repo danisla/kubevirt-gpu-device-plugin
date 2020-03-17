@@ -35,6 +35,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/NVIDIA/gpu-monitoring-tools/bindings/go/nvml"
@@ -188,6 +189,8 @@ func (dpi *GenericVGpuDevicePlugin) Allocate(ctx context.Context, reqs *pluginap
 	responses := pluginapi.AllocateResponse{}
 	for _, req := range reqs.ContainerRequests {
 		var devStr []string
+		deviceSpecs := make([]*pluginapi.DeviceSpec, 0)
+
 		for _, str := range req.DevicesIDs {
 			vGpuID, err := readVgpuIDFromFile(vGpuBasePath, str, "mdev_type/name")
 			if err != nil || vGpuID != dpi.deviceName {
@@ -195,12 +198,24 @@ func (dpi *GenericVGpuDevicePlugin) Allocate(ctx context.Context, reqs *pluginap
 				continue
 			}
 			devStr = append(devStr, str)
+			deviceSpecs = append(deviceSpecs, &pluginapi.DeviceSpec{
+				HostPath:      filepath.Join(vfioDevicePath, vGpuIommuMap[str]),
+				ContainerPath: filepath.Join(vfioDevicePath, vGpuIommuMap[str]),
+				Permissions:   "mrw",
+			})
 		}
+		deviceSpecs = append(deviceSpecs, &pluginapi.DeviceSpec{
+			HostPath:      filepath.Join(vfioDevicePath, "vfio"),
+			ContainerPath: filepath.Join(vfioDevicePath, "vfio"),
+			Permissions:   "mrw",
+		})
+
 		log.Printf("Allocated devices %s", devStr)
 		response := pluginapi.ContainerAllocateResponse{
 			Envs: map[string]string{
 				"VGPU_PASSTHROUGH_DEVICES_NVIDIA": strings.Join(devStr, ","),
 			},
+			Devices: deviceSpecs,
 		}
 
 		responses.ContainerResponses = append(responses.ContainerResponses, &response)

@@ -55,6 +55,9 @@ var deviceMap map[string][]string
 //Key is vGPU Type and value is the list of Nvidia vGPUs of that type
 var vGpuMap map[string][]NvidiaGpuDevice
 
+//Key is vGPU mdev id and value is an iommu group id
+var vGpuIommuMap map[string]string
+
 // Key is the Nvidia GPU id and value is the list of associated vGPU ids
 var gpuVgpuMap map[string][]string
 
@@ -209,6 +212,7 @@ func createIommuDeviceMap() {
 func createVgpuIDMap() {
 	vGpuMap = make(map[string][]NvidiaGpuDevice)
 	gpuVgpuMap = make(map[string][]string)
+	vGpuIommuMap = make(map[string]string)
 	//Walk directory to discover vGPU devices
 	filepath.Walk(vGpuBasePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -231,10 +235,18 @@ func createVgpuIDMap() {
 			log.Println("Could not get vGPU type identifier for device ", info.Name())
 			return nil
 		}
+		//Read iommu group id for this vGPU
+		iommuGroup, err := readLink(vGpuBasePath, info.Name(), "iommu_group")
+		if err != nil {
+			log.Println("Could not get IOMMU Group for device ", info.Name())
+			return nil
+		}
+		log.Printf("Iommu Group is: %s", iommuGroup)
 		log.Printf("Gpu id is %s", gpuID)
 		log.Printf("Vgpu id is %s", vGpuID)
 		gpuVgpuMap[gpuID] = append(gpuVgpuMap[gpuID], info.Name())
 		vGpuMap[vGpuID] = append(vGpuMap[vGpuID], NvidiaGpuDevice{info.Name()})
+		vGpuIommuMap[info.Name()] = iommuGroup
 		return nil
 	})
 }
